@@ -7,6 +7,7 @@ type ApiResp<T> = { data: T; error?: string };
 
 interface UserDto { id: string; name: string; role: 'user' | 'admin' }
 interface WalletDto { userId: string; balance: number }
+interface SettingsDto { whatsappNumber?: string; bankInfo?: string; usdtAddress?: string }
 
 export default function MePage() {
   const [user, setUser] = useState<UserDto | null>(null);
@@ -14,17 +15,21 @@ export default function MePage() {
   const [amount, setAmount] = useState<number>(100);
   const [loading, setLoading] = useState<boolean>(false);
   const [msg, setMsg] = useState<string>("");
+  const [method, setMethod] = useState<'bank'|'alipay'|'usdt'>('bank');
+  const [settings, setSettings] = useState<SettingsDto | null>(null);
 
   const fetchUserAndWallet = async () => {
-    const [u, w] = await Promise.all([
+    const [u, w, s] = await Promise.all([
       fetch('/api/auth/me').then((r) => r.json() as Promise<ApiResp<UserDto>>),
       fetch('/api/wallet').then(async (r) => {
         if (r.status === 401) return { data: null } as any;
         return (r.json() as Promise<any>);
-      })
+      }),
+      fetch('/api/settings').then(async (r)=>{ try { const d = await r.json(); return d?.data || {}; } catch { return {}; } })
     ]);
     setUser(u.data);
     setWallet(w?.data?.wallet ?? w?.data ?? null);
+    setSettings(s as SettingsDto);
   };
 
   useEffect(() => {
@@ -38,7 +43,7 @@ export default function MePage() {
       const res = await fetch('/api/wallet', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type, amount })
+        body: JSON.stringify({ type, amount, method })
       });
       const data = (await res.json()) as any;
       if (!res.ok) throw new Error(data.error || '操作失败');
@@ -130,6 +135,18 @@ export default function MePage() {
                             placeholder="请输入金额"
                           />
                         </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-300 mb-2">支付方式</label>
+                          <select
+                            value={method}
+                            onChange={(e)=>setMethod(e.target.value as any)}
+                            className="px-4 py-3 bg-white/5 border border-white/20 rounded-xl text-white"
+                          >
+                            <option value="bank">银行卡</option>
+                            <option value="alipay">支付宝</option>
+                            <option value="usdt">USDT</option>
+                          </select>
+                        </div>
                         <div className="flex gap-3">
                           <button 
                             onClick={() => doWallet('deposit')} 
@@ -146,6 +163,21 @@ export default function MePage() {
                             提现
                           </button>
                         </div>
+                      </div>
+                      {/* 支付指引 */}
+                      <div className="mt-4 text-sm text-gray-300 space-y-2">
+                        {method==='bank' && settings?.bankInfo && (
+                          <div className="p-3 bg-white/5 rounded border border-white/10">
+                            <div className="text-gray-400 mb-1">银行卡收款信息</div>
+                            <div className="whitespace-pre-wrap break-all">{settings.bankInfo}</div>
+                          </div>
+                        )}
+                        {method==='usdt' && settings?.usdtAddress && (
+                          <div className="p-3 bg-white/5 rounded border border-white/10">
+                            <div className="text-gray-400 mb-1">USDT 收款地址</div>
+                            <div className="whitespace-pre-wrap break-all">{settings.usdtAddress}</div>
+                          </div>
+                        )}
                       </div>
                       {msg && (
                         <div className="mt-4 p-3 bg-blue-500/20 border border-blue-500/30 rounded-lg">
